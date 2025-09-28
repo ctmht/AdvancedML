@@ -1,0 +1,21 @@
+# datasets should be downloaded seperately
+data/datasets/
+# so too literature (for now?)
+literature/
+
+# no need to include pycache
+__pycache__/
+
+# some TeX stuff:
+*.aux
+*.lof
+*.log
+*.lot
+*.fls
+*.out
+*.toc
+*.fmt
+*.fot
+*.cb
+*.cb2
+.*.lb
