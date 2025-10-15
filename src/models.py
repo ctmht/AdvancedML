@@ -19,7 +19,7 @@ class View(nn.Module):
 class BaseVAE(nn.Module):
     def encode(self, x: Tensor) -> Tensor:
         encoder_outputs = self.encoder(x)
-        return self.ff_mean(encoder_outputs), self.ff_variance(encoder_outputs).abs()
+        return self.ff_mean(encoder_outputs), self.ff_variance(encoder_outputs)
 
     def decode(self, z: Tensor) -> Tensor:
         return self.decoder(z)
@@ -27,12 +27,14 @@ class BaseVAE(nn.Module):
     def forward(self, x) -> Tensor:
         eps = 1e-10
         m, v = self.encode(x)
-        z = dist.Normal(m, v + eps)
+        z = dist.Normal(m, v**2 + eps)
         return self.decode(z.sample()), z
 
     def generate(self, z: Tensor | None = None, return_image: bool = True) -> Tensor:
         z = self.expected_latent_dist.sample() if z is None else z
         if return_image:
+            # print(z.shape)
+            # print(self.decode(z).shape)
             return self.decode(z)[0, 0].detach().cpu().numpy()
         return self.decode(z), z
 
@@ -78,4 +80,51 @@ class ExampleVAE(BaseVAE):
         )
         self.expected_latent_dist = dist.Normal(
             torch.zeros(latent_size), torch.ones(latent_size)
+        )
+
+
+class FeedForwardVAE(BaseVAE):
+    def __init__(
+        self,
+        in_size: int,
+        latent_size: int,
+        hidden_size: int,
+        depth: int = 2,
+        in_channels: int = 3,
+    ) -> None:
+        super(FeedForwardVAE, self).__init__()
+        self.latent_size = latent_size
+        self.hidden_size = hidden_size
+        self.depth = depth
+        if depth < 2:
+            raise ValueError("Depth has to be >= 2")
+        im_out_size = int(sqrt(in_size // in_channels))
+        # encoder layers:
+        self.encoder = nn.Sequential(
+            *(
+                [nn.Flatten(), self.layer_block(in_size, hidden_size)]
+                + [self.layer_block(hidden_size, hidden_size) for _ in range(depth - 2)]
+            )
+        )
+        self.ff_mean = nn.Linear(hidden_size, latent_size)
+        self.ff_variance = nn.Linear(hidden_size, latent_size)
+        self.decoder = nn.Sequential(
+            *(
+                [View(-1, latent_size), self.layer_block(latent_size, hidden_size)]
+                + [self.layer_block(hidden_size, hidden_size) for _ in range(depth - 2)]
+                + [
+                    self.layer_block(hidden_size, in_size),
+                    View(-1, in_channels, im_out_size, im_out_size),
+                ]
+            )
+        )
+        self.expected_latent_dist = dist.Normal(
+            torch.zeros(latent_size), torch.ones(latent_size)
+        )
+
+    def layer_block(self, in_size: int, out_size: int) -> nn.Module:
+        return nn.Sequential(
+            nn.Linear(in_size, out_size),
+            nn.LazyBatchNorm1d(),
+            nn.ReLU(),
         )

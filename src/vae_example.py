@@ -6,7 +6,7 @@ from torch import Tensor, device
 from typing import Any, Callable, Generator, Hashable
 from tqdm import trange, tqdm
 
-from models import ExampleVAE, BaseVAE
+from models import ExampleVAE, BaseVAE, FeedForwardVAE
 from metrics import ELBOLoss, VAEMetric, Metrics, MIG
 from plotting import vae_visual_appraisal, test_performance_line
 from datasets import Dataset, get_MNIST, get_pixel_shift
@@ -65,6 +65,8 @@ def run_test(test_loader, model, loss_func, metrics):
 def run_train(train_loader, model, schedule, loss_func, metrics: Metrics):
     model.train()
     train_losses = []
+    loss_sum = 0
+    count = 0
     train_bar = tqdm(train_loader, desc=f"epoch {schedule.epoch}:")
     optimizer = schedule.optimizer
     metrics.reset_metrics()
@@ -76,8 +78,10 @@ def run_train(train_loader, model, schedule, loss_func, metrics: Metrics):
         metrics(i, latent, out, label)
         train_losses.append(loss.item())
         loss.backward()
+        loss_sum += loss.item()
+        count += 1
         optimizer.step()
-        train_bar.set_postfix({"loss": f"{loss.item():.3f}"})
+        train_bar.set_postfix({"loss": f"{loss_sum / count:.3f}"})
     output = metrics.mean_metrics()
     output["loss"] = (sum(train_losses) / len(train_losses),)
     return output
@@ -121,11 +125,10 @@ def run_experiment(
 if "__main__" in __name__:
     # dataset = get_MNIST(8, 256)
     dataset = get_pixel_shift((28, 28), (128, 128), 16, 128)
-    model = ExampleVAE(784, latent_size=2, in_channels=1, inter_channels=[64, 128]).to(
-        GLOBAL_DEVICE
-    )
+    model = FeedForwardVAE(784, 784, 256 * 4, 2, in_channels=1).to(GLOBAL_DEVICE)
     schedule = Schedule(
-        number_of_epochs=12, optimizer=optim.AdamW(model.parameters(), lr=1e-5)
+        number_of_epochs=8 * 8 * 8,
+        optimizer=optim.AdamW(model.parameters(), lr=1e-4 * 3),
     )
     loss_func = ELBOLoss(0)
     metrics = Metrics({"MIG": MIG()})
@@ -139,4 +142,12 @@ if "__main__" in __name__:
     test_performance_line(metric_values["loss"])
     test_performance_line(metric_values["MIG"])
     example_images = [dataset.test_dataset[i][0].to(GLOBAL_DEVICE) for i in range(10)]
-    vae_visual_appraisal(model, "MNIST", example_images, GLOBAL_DEVICE)
+    vae_visual_appraisal(
+        model, "MNIST_linear_full_beta-10", example_images, GLOBAL_DEVICE
+    )
+    # MNIST_linear: bs=32*32*8, width=256, depth=2, ls=10, lr=3 * 1e-4a, ELBO(0.2 * 1e-11) = 0.0275
+    # MNIST_linear: bs=32*32*8, width=256, depth=2, ls=50, lr=3 * 1e-4a, ELBO(0.2 * 1e-11) = 0.0160
+    # MNIST_linear: bs=32*32*8, width=1024, depth=2, ls=784, lr=3 * 1e-4a, ELBO(0.2 * 1e-11) = 0.0042
+    # MNIST_linear: bs=32*32*8, width=1024, depth=2, ls=784, lr=3 * 1e-4a, ELBO(0) = 0.0030
+    # MNIST_linear: bs=32*32*8, width=1024, depth=2, ls=784, lr=3 * 1e-4a, ELBO(1e-10) = 0.0147
+    # MNIST_linear: bs=32*32*8, width=1024, depth=2, ls=784, lr=3 * 1e-4a, ELBO(1e-9) = 0.0287

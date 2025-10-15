@@ -57,7 +57,7 @@ def vae_visual_appraisal(
             )
         ],
         (8, 8),
-        f"data/images/{task_name}_generated.pdf",
+        f"data/images/{task_name}_latent_grid.pdf",
     )
     if example_images is None:
         return
@@ -69,4 +69,9 @@ def vae_visual_appraisal(
         ],
         (2, 10),
         f"data/images/{task_name}_examples_predicted.pdf",
+    )
+    show_image_grid(
+        [model.generate() for i in range(64)],
+        (8, 8),
+        f"data/images/{task_name}_generated_grid.pdf",
     )
