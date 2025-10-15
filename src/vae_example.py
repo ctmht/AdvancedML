@@ -3,16 +3,25 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch import Tensor, device
-from typing import Callable
+from typing import Any, Callable, Generator, Hashable
 from tqdm import trange, tqdm
 
 from models import ExampleVAE, BaseVAE
-from metrics import ELBOLoss, VAEMetric
+from metrics import ELBOLoss, VAEMetric, Metrics, MIG
 from plotting import vae_visual_appraisal, test_performance_line
-from datasets import Dataset, get_MNIST
+from datasets import Dataset, get_MNIST, get_pixel_shift
 
 
 GLOBAL_DEVICE = device("cuda") if torch.cuda.is_available() else device("cpu")
+
+
+def reshape_dict_list(dict_list: list[dict]) -> dict[Hashable, list]:
+    keys = list(dict_list[0].keys())
+    output = {i: [] for i in keys}
+    for i in dict_list:
+        for k, v in i.items():
+            output[k].append(v)
+    return output
 
 
 class Schedule:  # I plan on adding stuff later, hence this class
@@ -20,6 +29,7 @@ class Schedule:  # I plan on adding stuff later, hence this class
         self.n_epochs = number_of_epochs
         self.lr = {}
         self.optimizer = optimizer
+        self.epoch: int = 0
 
     def adjust_optimizer(self, lr: float) -> None:
         for g in self.optimizer.param_groups:
@@ -28,52 +38,61 @@ class Schedule:  # I plan on adding stuff later, hence this class
     def __iter__(self):
         return self._generator()
 
-    def _generator(self) -> int:
+    def _generator(self) -> Generator[int, None, None]:
         for i in trange(self.n_epochs):
+            self.epoch = i
             if i in self.lr:
                 self.adjust_optimizer(self.lr[i])
             yield i
 
 
-def run_test(test_loader, model, loss_func):
+def run_test(test_loader, model, loss_func, metrics):
     model.eval()
     test_losses = []
-    for i, label in test_loader:
+    metrics.reset_metrics()
+    print("running test")
+    for i, label in tqdm(test_loader):
         i = i.to(GLOBAL_DEVICE)
         out, latent = model(i)
-        loss = loss_func(i, latent, out)
+        loss = loss_func(i, latent, out, label)
         test_losses.append(loss.detach().item())
+        metrics(i, latent, out, label)
+    output = metrics.mean_metrics()
+    output["loss"] = (sum(test_losses) / len(test_losses),)
+    return output
 
-    test_loss = sum(test_losses) / len(test_losses)
-    return test_loss
 
-
-def run_train(train_loader, model, optimizer, loss_func):
+def run_train(train_loader, model, schedule, loss_func, metrics: Metrics):
     model.train()
     train_losses = []
-    train_bar = tqdm(train_loader)
+    train_bar = tqdm(train_loader, desc=f"epoch {schedule.epoch}:")
+    optimizer = schedule.optimizer
+    metrics.reset_metrics()
     for i, label in train_bar:
         optimizer.zero_grad()
         i = i.to(GLOBAL_DEVICE)
         out, latent = model(i)
-        loss = loss_func(i, latent, out)
+        loss = loss_func(i, latent, out, label)
+        metrics(i, latent, out, label)
         train_losses.append(loss.item())
         loss.backward()
         optimizer.step()
         train_bar.set_postfix({"loss": f"{loss.item():.3f}"})
-
-    return train_losses
+    output = metrics.mean_metrics()
+    output["loss"] = (sum(train_losses) / len(train_losses),)
+    return output
 
 
 def run_epoch(
     train_loader,
     test_loader,
     model: nn.Module,
-    optimizer,
-    loss_func: Callable[[Tensor, Tensor, Tensor], Tensor],
+    schedule: Schedule,
+    loss_func: VAEMetric,
+    metrics: Metrics,
 ):
-    run_train(train_loader, model, optimizer, loss_func)
-    return run_test(test_loader, model, loss_func)
+    return run_train(train_loader, model, schedule, loss_func, metrics)
+    # return run_test(test_loader, model, loss_func, metrics)
 
 
 def run_experiment(
@@ -81,37 +100,43 @@ def run_experiment(
     schedule: Schedule,
     model: BaseVAE,
     loss_func: VAEMetric,
+    metrics: Metrics,
 ):
-    test_losses = [run_test(dataset.test_loader, model, loss_func)]
+    metric_values = [run_test(dataset.test_loader, model, loss_func, metrics)]
+
     for epoch in schedule:
-        test_losses.append(
+        metric_values.append(
             run_epoch(
                 dataset.train_loader,
                 dataset.test_loader,
                 model,
-                schedule.optimizer,
+                schedule,
                 loss_func,
+                metrics,
             )
         )
-    return test_losses
+    return reshape_dict_list(metric_values)
 
 
 if "__main__" in __name__:
-    dataset = get_MNIST(8, 256)
-    model = ExampleVAE(
-        784, latent_size=140, in_channels=1, inter_channels=[64, 128]
-    ).to(GLOBAL_DEVICE)
+    # dataset = get_MNIST(8, 256)
+    dataset = get_pixel_shift((28, 28), (128, 128), 16, 128)
+    model = ExampleVAE(784, latent_size=2, in_channels=1, inter_channels=[64, 128]).to(
+        GLOBAL_DEVICE
+    )
     schedule = Schedule(
         number_of_epochs=12, optimizer=optim.AdamW(model.parameters(), lr=1e-5)
     )
     loss_func = ELBOLoss(0)
-    test_losses = run_experiment(dataset, schedule, model, loss_func)
+    metrics = Metrics({"MIG": MIG()})
+    metric_values = run_experiment(dataset, schedule, model, loss_func, metrics)
 
-    print(test_losses)
+    print(metric_values)
     # visualisation
     if not os.path.exists("data/images"):
         os.makedirs("data/images")
 
-    test_performance_line(test_losses)
+    test_performance_line(metric_values["loss"])
+    test_performance_line(metric_values["MIG"])
     example_images = [dataset.test_dataset[i][0].to(GLOBAL_DEVICE) for i in range(10)]
     vae_visual_appraisal(model, "MNIST", example_images, GLOBAL_DEVICE)
