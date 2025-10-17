@@ -1,4 +1,5 @@
 from itertools import product
+from tkinter import W
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import ImageGrid
 from torch import tensor, Tensor
@@ -45,13 +46,16 @@ def vae_visual_appraisal(
     """
     No, you don't want to take a close look at this function.
     """
+    model.eval()
     if device is None:
         device = (
             torch.device("cuda") if torch.cuda.is_available else torch.device("cpu")
         )
     show_image_grid(
         [
-            model.generate(tensor([a, b] + [0] * (model.latent_size - 2)).to(device))
+            model.generate(
+                tensor([a, b] + [0] * (model.latent_size - 2)).view(1, 1, -1).to(device)
+            )
             for a, b in product(
                 [-1.0, -0.75, -0.5, -0.25, 0.0, 0.25, 0.5, 0.75, 1.0], repeat=2
             )
@@ -64,14 +68,14 @@ def vae_visual_appraisal(
     show_image_grid(
         [i.cpu()[0] for i in example_images]
         + [
-            model(i.view(1, -1, 28, 28))[0][0, 0].detach().cpu().numpy()
+            model(i.view(1, -1, 28, 28).to(device))[0][0, 0].detach().cpu().numpy()
             for i in example_images
         ],
         (2, 10),
         f"data/images/{task_name}_examples_predicted.pdf",
     )
     show_image_grid(
-        [model.generate() for i in range(64)],
+        [model.generate(device=device) for _ in range(64)],
         (8, 8),
         f"data/images/{task_name}_generated_grid.pdf",
     )

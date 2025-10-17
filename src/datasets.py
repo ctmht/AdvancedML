@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 from torch import Tensor
 from torchvision import datasets, transforms
 from collections import namedtuple
@@ -8,8 +9,13 @@ from random import randrange
 NUMBER_OF_THREADS = 8
 DATASET_DIR = "data/datasets"
 Dataset = namedtuple(
-    "Dataset", ["train_dataset", "test_dataset", "train_loader", "test_loader"]
+    "Dataset",
+    ["train_dataset", "test_dataset", "train_loader", "test_loader", "label_converter"],
 )
+
+
+def simple_converter(x):
+    return x
 
 
 def get_MNIST(train_batch_size: int, test_batch_size: int) -> Dataset:
@@ -30,7 +36,13 @@ def get_MNIST(train_batch_size: int, test_batch_size: int) -> Dataset:
         batch_size=test_batch_size,
         num_workers=NUMBER_OF_THREADS,
     )
-    return Dataset(train_dataset, test_dataset, train_loader, test_loader)
+    return Dataset(
+        train_dataset,
+        test_dataset,
+        train_loader,
+        test_loader,
+        lambda x: F.one_hot(x.clone().long(), 10).float(),
+    )
 
 
 def create_pixel_shift_image(shape: tuple, index: int | tuple) -> tuple[Tensor, Tensor]:
@@ -68,4 +80,6 @@ def get_pixel_shift(
         batch_size=test_batch_size,
         num_workers=NUMBER_OF_THREADS,
     )
-    return Dataset(train_dataset, test_dataset, train_loader, test_loader)
+    return Dataset(
+        train_dataset, test_dataset, train_loader, test_loader, simple_converter
+    )

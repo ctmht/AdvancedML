@@ -30,8 +30,11 @@ class BaseVAE(nn.Module):
         z = dist.Normal(m, v**2 + eps)
         return self.decode(z.sample()), z
 
-    def generate(self, z: Tensor | None = None, return_image: bool = True) -> Tensor:
-        z = self.expected_latent_dist.sample() if z is None else z
+    def generate(
+        self, z: Tensor | None = None, return_image: bool = True, device=None
+    ) -> Tensor:
+        s = self.expected_latent_dist.sample()
+        z = (s.to(device) if device is not None else s) if z is None else z
         if return_image:
             # print(z.shape)
             # print(self.decode(z).shape)
@@ -126,5 +129,5 @@ class FeedForwardVAE(BaseVAE):
         return nn.Sequential(
             nn.Linear(in_size, out_size),
             nn.LazyBatchNorm1d(),
-            nn.ReLU(),
+            nn.LeakyReLU(0.01),
         )
