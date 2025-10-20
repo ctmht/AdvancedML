@@ -22,6 +22,7 @@ def test_performance_line(test_losses: list[float] | list[list[float]]) -> None:
 def show_image_grid(
     images: list,
     shape: tuple[int, int],
+    vmax: int | float | None = 1.0,
     path: str | None = None,
 ) -> None:
     fig = plt.figure(figsize=(16.0, 9.0))
@@ -33,7 +34,7 @@ def show_image_grid(
     )
 
     for ax, im in zip(grid, images):
-        ax.imshow(im)
+        ax.imshow(im, vmax=vmax)
 
     plt.show()
     if path:
@@ -61,6 +62,7 @@ def vae_visual_appraisal(
             )
         ],
         (8, 8),
+        1,
         f"data/images/{task_name}_latent_grid.pdf",
     )
     if example_images is None:
@@ -72,10 +74,11 @@ def vae_visual_appraisal(
             for i in example_images
         ],
         (2, 10),
+        1,
         f"data/images/{task_name}_examples_predicted.pdf",
     )
-    show_image_grid(
-        [model.generate(device=device) for _ in range(64)],
-        (8, 8),
-        f"data/images/{task_name}_generated_grid.pdf",
-    )
+    # show_image_grid(
+    #     [model.generate(device=device) for _ in range(64)],
+    #     (8, 8),
+    #     f"data/images/{task_name}_generated_grid.pdf",
+    # )

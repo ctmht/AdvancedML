@@ -50,6 +50,11 @@ class ELBOLoss(VAEMetric):
         mu, var = latent_dist.mean, latent_dist.variance
         kl_div = (mu**2 + var - 1 - torch.log(var)).sum(dim=1).mean()
         exp_loss = 0.5 * ((data_example - output) ** 2).mean()
+        # if exp_loss.item() <= 6.4e-4:
+        #     print(data_example.abs().sum())
+        #     print("data", data_example)
+        #     print(output.abs().sum())
+        #     print("output", output)
         return exp_loss + self.beta * kl_div
 
 
@@ -60,3 +65,4 @@ class MIG(VAEMetric):
             latent_vector.mean.detach().cpu().numpy().T,
             factors.detach().cpu().numpy().T,
         )["mig.discrete_score"]
+

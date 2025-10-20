@@ -129,5 +129,14 @@ class FeedForwardVAE(BaseVAE):
         return nn.Sequential(
             nn.Linear(in_size, out_size),
             nn.LazyBatchNorm1d(),
-            nn.LeakyReLU(0.01),
+            # nn.Sigmoid(),
+            nn.LeakyReLU(0.1),
         )
+
+
+class VQVAE(BaseVAE):
+    def __init__(self) -> None:
+        super().__init__()
+
+    def forward(self, x):
+        pass

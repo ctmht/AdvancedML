@@ -15,6 +15,27 @@ from datasets import Dataset, get_MNIST, get_pixel_shift
 GLOBAL_DEVICE = device("cuda") if torch.cuda.is_available() else device("cpu")
 
 
+def swap_nested_dict_axes(dictionary: dict) -> dict:
+    keys = []
+    for nested_dicts in dictionary.values():
+        keys += list(nested_dicts.keys())
+
+    keys = set(keys)
+    output = {}
+    for key in keys:
+        output[key] = {
+            outer_key: nested_dict[key]
+            for outer_key, nested_dict in dictionary.items()
+            if key in nested_dict
+        }
+
+    return output
+
+
+def scale_dict_values(dictionary: dict, scaling: int | float) -> dict:
+    return {k: v * scaling for k, v in dictionary.items()}
+
+
 def reshape_dict_list(dict_list: list[dict]) -> dict[Hashable, list]:
     keys = list(dict_list[0].keys())
     output = {i: [] for i in keys}
@@ -27,13 +48,25 @@ def reshape_dict_list(dict_list: list[dict]) -> dict[Hashable, list]:
 class Schedule:  # I plan on adding stuff later, hence this class
     def __init__(self, number_of_epochs: int, optimizer: optim.Optimizer) -> None:
         self.n_epochs = number_of_epochs
-        self.lr = {}
+        self.schedule: dict[int, dict[str, Any]] = {}
         self.optimizer = optimizer
         self.epoch: int = 0
 
-    def adjust_optimizer(self, lr: float) -> None:
+    def manual_schedule(
+        self, parameter_schedule: dict[str, dict] | dict[int, str]
+    ) -> None:
+        if isinstance(list(parameter_schedule.keys())[0], str):
+            self.schedule = swap_nested_dict_axes(parameter_schedule)
+        else:
+            self.schedule = parameter_schedule
+
+    def adjust_optimizer(self, epoch: int) -> None:
+        if epoch not in self.schedule:
+            return
+
         for g in self.optimizer.param_groups:
-            g["lr"] = lr
+            for parameter_name, value in self.schedule[epoch].items():
+                g[parameter_name] = value
 
     def __iter__(self):
         return self._generator()
@@ -41,8 +74,7 @@ class Schedule:  # I plan on adding stuff later, hence this class
     def _generator(self) -> Generator[int, None, None]:
         for i in trange(self.n_epochs):
             self.epoch = i
-            if i in self.lr:
-                self.adjust_optimizer(self.lr[i])
+            self.adjust_optimizer(i)
             yield i
 
 
@@ -71,7 +103,7 @@ def run_train(dataset, model, schedule, loss_func, metrics: Metrics):
     count = 0
     train_loader = dataset.train_loader
     label_converter = dataset.label_converter
-    train_bar = tqdm(train_loader, desc=f"epoch {schedule.epoch}:")
+    train_bar = tqdm(train_loader, desc=f"epoch {schedule.epoch}")
     optimizer = schedule.optimizer
     metrics.reset_metrics()
     for i, label in train_bar:
@@ -127,15 +159,32 @@ def run_experiment(
 
 if "__main__" in __name__:
     # dataset = get_MNIST(256, 256)
-    dataset = get_pixel_shift((28, 28), (16384, 2048), 128, 2048)
-    model = FeedForwardVAE(784, 2, 64 * 2, 2, in_channels=1).to(GLOBAL_DEVICE)
+    # dataset = get_pixel_shift((28, 28), (16384, 2048), 128, 2048)
+    dataset = get_pixel_shift((28, 28), (16384, 2048), 16, 2048)
+    model = FeedForwardVAE(784, 784, 4096 * 2, 3, in_channels=1).to(GLOBAL_DEVICE)
     schedule = Schedule(
-        number_of_epochs=700,
-        optimizer=optim.AdamW(model.parameters(), lr=1e-3 * 3),
+        number_of_epochs=35,
+        optimizer=optim.AdamW(model.parameters(), lr=1e-3),
     )
-    schedule.lr = {120: 1e-3, 300: 1e-4 * 6, 500: 1e-4 * 3}
+    schedule.manual_schedule(
+        {
+            "lr": scale_dict_values(
+                {
+                    0: 3e-4,
+                    20: 1e-5,
+                    300: 1e-3,
+                    1000: 1e-4,
+                    2050: 1e-3,
+                    300: 6e-4,
+                    400: 3e-4,
+                },
+                1e1,
+            ),
+            # "momentum": {120: 0.01},
+        }
+    )
     loss_func = ELBOLoss(0)
-    metrics = Metrics({"MIG": MIG()})
+    metrics = Metrics({})  # {"MIG": MIG()})
     metric_values = run_experiment(dataset, schedule, model, loss_func, metrics)
 
     print(metric_values)
@@ -144,7 +193,7 @@ if "__main__" in __name__:
         os.makedirs("data/images")
 
     test_performance_line(metric_values["loss"])
-    test_performance_line(metric_values["MIG"])
+    # test_performance_line(metric_values["MIG"])
     example_images = [dataset.test_dataset[i][0].to(GLOBAL_DEVICE) for i in range(10)]
     vae_visual_appraisal(
         model, "MNIST_linear_full_beta-0", example_images, GLOBAL_DEVICE
