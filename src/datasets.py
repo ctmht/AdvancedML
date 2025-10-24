@@ -61,11 +61,11 @@ def get_pixel_shift(
 ) -> Dataset:
     max_index = shape[0] * shape[1] - 1
     train_dataset = [
-        create_pixel_shift_image(shape, randrange(0, max_index))
+        create_pixel_shift_image(shape, randrange(0, max_index + 1))
         for _ in range(num_examples[0])
     ]
     test_dataset = [
-        create_pixel_shift_image(shape, randrange(0, max_index))
+        create_pixel_shift_image(shape, randrange(0, max_index + 1))
         for _ in range(num_examples[1])
     ]
 

@@ -7,7 +7,17 @@ from typing import Any, Callable, Generator, Hashable
 from tqdm import trange, tqdm
 
 from models import ExampleVAE, BaseVAE, FeedForwardVAE
-from metrics import ELBOLoss, VAEMetric, Metrics, MIG
+from metrics import (
+    MSE,
+    BinaryCrossExtropy,
+    ELBOLoss,
+    GaussKLdiv,
+    LatentMean,
+    LatentStddev,
+    VAEMetric,
+    Metrics,
+    MIG,
+)
 from plotting import vae_visual_appraisal, test_performance_line
 from datasets import Dataset, get_MNIST, get_pixel_shift
 
@@ -158,12 +168,13 @@ def run_experiment(
 
 
 if "__main__" in __name__:
-    # dataset = get_MNIST(256, 256)
-    # dataset = get_pixel_shift((28, 28), (16384, 2048), 128, 2048)
-    dataset = get_pixel_shift((28, 28), (16384, 2048), 16, 2048)
-    model = FeedForwardVAE(784, 784, 4096 * 2, 3, in_channels=1).to(GLOBAL_DEVICE)
+    image_shape = (28, 28)
+    n_pixels = image_shape[0] * image_shape[1]
+    dataset = get_MNIST(256 * 2, 256)
+    # dataset = get_pixel_shift(image_shape, (16384, 2048), 256 + 128, 2048)
+    model = FeedForwardVAE(n_pixels, 20, 4096 * 2, 3, in_channels=1).to(GLOBAL_DEVICE)
     schedule = Schedule(
-        number_of_epochs=35,
+        number_of_epochs=250,
         optimizer=optim.AdamW(model.parameters(), lr=1e-3),
     )
     schedule.manual_schedule(
@@ -171,20 +182,33 @@ if "__main__" in __name__:
             "lr": scale_dict_values(
                 {
                     0: 3e-4,
-                    20: 1e-5,
-                    300: 1e-3,
-                    1000: 1e-4,
-                    2050: 1e-3,
-                    300: 6e-4,
-                    400: 3e-4,
+                    # 55: 3e-5,
+                    # 45: 3e-6,
+                    # 50: 1e-6,
+                    # 55: 3e-7,
+                    # 200: 1e-5,
+                    # 300: 1e-3,
+                    # 1000: 1e-4,
+                    # 2050: 1e-3,
+                    # 300: 6e-4,
+                    # 400: 3e-4,
                 },
-                1e1,
+                1e0,
             ),
             # "momentum": {120: 0.01},
         }
     )
-    loss_func = ELBOLoss(0)
-    metrics = Metrics({})  # {"MIG": MIG()})
+    loss_func = ELBOLoss(0.000000)
+    metrics = Metrics(
+        {
+            "kl_div": GaussKLdiv(),
+            "mse": MSE(),
+            "bce": BinaryCrossExtropy(),
+            # "MIG": MIG(),
+            "latent_mean": LatentMean(),
+            "latent_stddev": LatentStddev(),
+        }
+    )
     metric_values = run_experiment(dataset, schedule, model, loss_func, metrics)
 
     print(metric_values)
@@ -192,8 +216,27 @@ if "__main__" in __name__:
     if not os.path.exists("data/images"):
         os.makedirs("data/images")
 
-    test_performance_line(metric_values["loss"])
-    # test_performance_line(metric_values["MIG"])
+    test_performance_line(
+        {
+            "elbo": metric_values["loss"],
+            "mse": metric_values["mse"],
+            "bce": metric_values["bce"],
+        }
+    )
+    test_performance_line({"kl_div": metric_values["kl_div"]})
+    test_performance_line(
+        {
+            "latent mean": metric_values["latent_mean"],
+            "latent stddev": metric_values["latent_stddev"],
+        }
+    )
+    test_performance_line(
+        {
+            "latent mean": metric_values["latent_mean"],
+        },
+        log=False,
+    )
+    # test_performance_line({"mig": metric_values["MIG"]})
     example_images = [dataset.test_dataset[i][0].to(GLOBAL_DEVICE) for i in range(10)]
     vae_visual_appraisal(
         model, "MNIST_linear_full_beta-0", example_images, GLOBAL_DEVICE

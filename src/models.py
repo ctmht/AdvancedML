@@ -27,7 +27,7 @@ class BaseVAE(nn.Module):
     def forward(self, x) -> Tensor:
         eps = 1e-10
         m, v = self.encode(x)
-        z = dist.Normal(m, v**2 + eps)
+        z = dist.Normal(m, v**2 + eps)  # 2.72 ** (v))  # torch.exp(v))
         return self.decode(z.sample()), z
 
     def generate(
@@ -129,8 +129,8 @@ class FeedForwardVAE(BaseVAE):
         return nn.Sequential(
             nn.Linear(in_size, out_size),
             nn.LazyBatchNorm1d(),
-            # nn.Sigmoid(),
-            nn.LeakyReLU(0.1),
+            nn.Sigmoid(),
+            # nn.LeakyReLU(0.1),
         )
 
 
