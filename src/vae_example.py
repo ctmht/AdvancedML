@@ -5,6 +5,7 @@ import torch.optim as optim
 from torch import Tensor, device
 from typing import Any, Callable, Generator, Hashable
 from tqdm import trange, tqdm
+from datetime import datetime
 
 from models import ExampleVAE, BaseVAE, FeedForwardVAE
 from metrics import (
@@ -23,6 +24,8 @@ from datasets import Dataset, get_MNIST, get_pixel_shift
 
 
 GLOBAL_DEVICE = device("cuda") if torch.cuda.is_available() else device("cpu")
+if not os.path.exists("data/images"):
+    os.makedirs("data/images", exist_ok=True)
 
 
 def swap_nested_dict_axes(dictionary: dict) -> dict:
@@ -88,7 +91,7 @@ class Schedule:  # I plan on adding stuff later, hence this class
             yield i
 
 
-def run_test(test_loader, model, loss_func, metrics):
+def run_test(dataset, model, loss_func, metrics):
     model.eval()
     test_losses = []
     test_loader = dataset.test_loader
@@ -167,7 +170,105 @@ def run_experiment(
     return reshape_dict_list(metric_values)
 
 
-if "__main__" in __name__:
+def create_log_directory(test_name: str) -> None:
+    log_dir = f"data/logs/automatic/{test_name}"
+    os.makedirs(log_dir, exist_ok=True)
+    os.makedirs(log_dir + "/metrics", exist_ok=True)
+    os.makedirs(log_dir + "/images", exist_ok=True)
+
+
+def experiment_from_config(config) -> None:
+    """
+    assumes ffnn for now
+    config keys:
+        experiment_name: str
+        image_shape: tuple[int, int]
+        batch_size: int
+        latent_space_size: int
+        width: int
+        depth: int
+        mnist: bool # alternative is pixel
+        optimizer: type[optim.Optimizer]
+        n_epochs: int
+        schedule: dict[str, dict[int, float]]
+        loss_func: VAEMetric
+    """
+    image_shape = config["image_shape"]
+    n_pixels = image_shape[0] * image_shape[1]
+    if config["mnist"]:
+        dataset = get_MNIST(config["batch_size"], 256 * 4)
+    else:
+        dataset = get_pixel_shift(
+            image_shape, (16384, 2048), config["batch_size"], 2048
+        )
+    model = FeedForwardVAE(
+        n_pixels,
+        config["latent_space_size"],
+        config["width"],
+        config["depth"],
+        in_channels=1,
+    ).to(GLOBAL_DEVICE)
+    optimizer = config["optimizer"](model.parameters())
+    schedule = Schedule(number_of_epochs=config["n_epochs"], optimizer=optimizer)
+    schedule.manual_schedule(config["schedule"])
+    loss_func = config["loss_func"]
+    metrics = Metrics(
+        {
+            "kl_div": GaussKLdiv(),
+            "mse": MSE(),
+            "bce": BinaryCrossExtropy(),
+            # "MIG": MIG(),
+            "latent_mean": LatentMean(),
+            "latent_stddev": LatentStddev(),
+        }
+    )
+    name = config["experiment_name"]
+    create_log_directory(name)
+    metric_values = run_experiment(dataset, schedule, model, loss_func, metrics)
+
+    # print(metric_values)
+    # visualisation
+    test_performance_line(
+        {
+            "elbo": metric_values["loss"],
+            "mse": metric_values["mse"],
+            "bce": metric_values["bce"],
+        },
+        path=f"{name}/images/losses.pdf",
+    )
+    test_performance_line(
+        {"kl_div": metric_values["kl_div"]},
+        path=f"{name}/images/kl_div.pdf",
+    )
+    test_performance_line(
+        {
+            "latent mean": metric_values["latent_mean"],
+            "latent stddev": metric_values["latent_stddev"],
+        },
+        path=f"{name}/images/latent_stats.pdf",
+    )
+    test_performance_line(
+        {
+            "latent mean": metric_values["latent_mean"],
+        },
+        log=False,
+        path=f"{name}/images/latent_mean.pdf",
+    )
+    # test_performance_line({"mig": metric_values["MIG"]})
+    example_images = [dataset.test_dataset[i][0].to(GLOBAL_DEVICE) for i in range(10)]
+    vae_visual_appraisal(
+        model,
+        name,
+        example_images,
+        GLOBAL_DEVICE,
+    )
+    metrics.dump(
+        f"data/logs/automatic/{name}/metrics/{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        str(config),
+    )
+
+
+def direct_test():
     image_shape = (28, 28)
     n_pixels = image_shape[0] * image_shape[1]
     dataset = get_MNIST(256 * 2, 256)
@@ -179,26 +280,10 @@ if "__main__" in __name__:
     )
     schedule.manual_schedule(
         {
-            "lr": scale_dict_values(
-                {
-                    0: 3e-4,
-                    # 55: 3e-5,
-                    # 45: 3e-6,
-                    # 50: 1e-6,
-                    # 55: 3e-7,
-                    # 200: 1e-5,
-                    # 300: 1e-3,
-                    # 1000: 1e-4,
-                    # 2050: 1e-3,
-                    # 300: 6e-4,
-                    # 400: 3e-4,
-                },
-                1e0,
-            ),
-            # "momentum": {120: 0.01},
+            "lr": scale_dict_values({0: 3e-4}, 1e0),
         }
     )
-    loss_func = ELBOLoss(0.000000)
+    loss_func = ELBOLoss(0.0)
     metrics = Metrics(
         {
             "kl_div": GaussKLdiv(),
@@ -209,13 +294,11 @@ if "__main__" in __name__:
             "latent_stddev": LatentStddev(),
         }
     )
+    create_log_directory("")
     metric_values = run_experiment(dataset, schedule, model, loss_func, metrics)
 
     print(metric_values)
     # visualisation
-    if not os.path.exists("data/images"):
-        os.makedirs("data/images")
-
     test_performance_line(
         {
             "elbo": metric_values["loss"],
@@ -247,3 +330,20 @@ if "__main__" in __name__:
     # MNIST_linear: bs=32*32*8, width=1024, depth=2, ls=784, lr=3 * 1e-4a, ELBO(0) = 0.0030
     # MNIST_linear: bs=32*32*8, width=1024, depth=2, ls=784, lr=3 * 1e-4a, ELBO(1e-10) = 0.0147
     # MNIST_linear: bs=32*32*8, width=1024, depth=2, ls=784, lr=3 * 1e-4a, ELBO(1e-9) = 0.0287
+
+
+if "__main__" in __name__:
+    config = {
+        "experiment_name": "config_experiment",
+        "image_shape": (28, 28),
+        "batch_size": 256 + 128,
+        "mnist": True,
+        "width": 8192,
+        "depth": 3,
+        "latent_space_size": 40,
+        "optimizer": optim.AdamW,
+        "schedule": {"lr": {0: 6e-3}},
+        "n_epochs": 30,
+        "loss_func": ELBOLoss(0.0),
+    }
+    experiment_from_config(config)

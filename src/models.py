@@ -134,6 +134,32 @@ class FeedForwardVAE(BaseVAE):
         )
 
 
+class ResnetBlock(nn.Module):
+    def __init__(self, channels: int = 128) -> None:
+        super(ResnetBlock).__init__()
+        self.internal_module = nn.Sequential(
+            nn.Conv2d(channels, channels, (3, 3), 1, (1, 1)),
+            nn.MaxPool2d((2, 2), 1, (1, 1)),
+            nn.LazyBatchNorm2d(),
+            nn.LeakyReLU(0.1),
+            nn.Conv2d(channels, channels, (3, 3), 1, (1, 1)),
+            nn.MaxPool2d((2, 2), 1, (1, 1)),
+        )
+        self.final_module = nn.Sequential(nn.LazyBatchNorm2d(), nn.LeakyReLU(0.1))
+
+    def forward(self, x: Tensor) -> Tensor:
+        return self.final_module(self.internal_module(x.clone()) + x)
+
+
+class ResNet:
+    def __init__(self, channels: int, depth: int) -> None:
+        super(ResNet).__init__()
+
+        self.residual_blocks = nn.Sequential(
+            *(ResnetBlock(channels) for _ in range(depth))
+        )
+
+
 class VQVAE(BaseVAE):
     def __init__(self) -> None:
         super().__init__()

@@ -1,3 +1,4 @@
+import pickle
 import torch
 import torch.nn as nn
 from torch import Tensor
@@ -43,6 +44,15 @@ class Metrics:
 
     def mean_metrics(self) -> dict:
         return {i: sum(v) / len(v) for i, v in self.recorded_values.items()}
+
+    def dump(self, path: str, description: str = "") -> None:
+        pickle.dump((description, self.recorded_values), open(path, "wb"))
+
+    def load(self, path: str) -> str:
+        """returns description"""
+        d, v = pickle.load(open(path, "rb"))
+        self.recorded_values = v
+        return d
 
 
 class ELBOLoss(VAEMetric):

@@ -7,7 +7,9 @@ import torch
 
 
 def test_performance_line(
-    test_losses: list[float] | dict[str, list[float]], log: bool = True
+    test_losses: list[float] | dict[str, list[float]],
+    log: bool = True,
+    path: str | None = None,
 ) -> None:
     """
     test performance plot for debugging and quick evaluation
@@ -21,6 +23,8 @@ def test_performance_line(
     plt.legend()
     if log:
         plt.yscale("log")
+    if path is not None:
+        fig.savefig(f"data/logs/automatic/{path}")
     plt.show()
 
 
@@ -69,7 +73,7 @@ def vae_visual_appraisal(
         image_grid,
         (8, 8),
         1,
-        f"data/images/{task_name}_latent_grid.pdf",
+        f"data/logs/automatic/{task_name}/images/latent_grid.pdf",
     )
     if example_images is None:
         return
@@ -85,7 +89,7 @@ def vae_visual_appraisal(
         ],
         (2, 10),
         1,
-        f"data/images/{task_name}_examples_predicted.pdf",
+        f"data/logs/automatic/{task_name}/images/examples_predicted.pdf",
     )
     show_image_grid(
         [i.cpu()[0] for i in example_images]
@@ -98,7 +102,7 @@ def vae_visual_appraisal(
         ],
         (2, 10),
         None,
-        f"data/images/{task_name}_examples_predicted_normalized.pdf",
+        f"data/logs/automatic/{task_name}/images/examples_predicted_normalized.pdf",
     )
     # show_image_grid(
     #     [model.generate(device=device) for _ in range(64)],
