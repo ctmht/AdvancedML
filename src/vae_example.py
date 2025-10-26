@@ -170,7 +170,9 @@ def run_train(dataset, model, schedule, loss_func, metrics: Metrics):
         optimizer.zero_grad()
         i = i.to(GLOBAL_DEVICE)
         label = label_converter(label)
-        # print(i.mean(), i.std(), i.min(), i.max())
+        print(
+            f"shape: {i.shape}, mean: {i.mean().item()}, std: {i.std().item()}, min: {i.min().item()}, max: {i.max().item()}"
+        )
         out, latent = model(i)
         loss = loss_func(i, latent, out, label)
         metrics(i, latent, out, label)
@@ -406,7 +408,7 @@ def main():
     }
     config_adjustments = {
         "experiment_name": [
-            "updated/b=0",
+            "updated_post_success/b=0",
             # "beta-test2/b=1e-17",
             # "beta-test2/b=1e-15",
             # "beta-test2/b=1e-13",
@@ -448,6 +450,8 @@ def main():
         get_multi_experiment_metric("beta-test", "bce"), title="BCE loss"
     )
 
+
+# shape: torch.Size([384, 1, 28, 28]), mean: 0.12965288758277893, std: 0.3067740201950073, min: 0.0, max: 1.0
 
 if "__main__" in __name__:
     main()

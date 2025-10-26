@@ -89,7 +89,7 @@ class MSE(VAEMetric):
         output: Tensor,
         factors: Tensor,
     ) -> Tensor:
-        return ((data_example - output) ** 2).mean()
+        return ((data_example - output) ** 2).mean(dim=0).sum()
 
 
 class LatentMean(VAEMetric):
