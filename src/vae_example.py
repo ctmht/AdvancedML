@@ -155,17 +155,31 @@ def run_experiment(
     metric_values = [run_test(dataset, model, loss_func, metrics)]
 
     for epoch in schedule:
-        metric_values.append(
-            run_epoch(
-                dataset,
-                model,
-                schedule,
-                loss_func,
-                metrics,
-            )
+        epoch_metrics = run_epoch(
+            dataset,
+            model,
+            schedule,
+            loss_func,
+            metrics,
         )
-    return reshape_dict_list(metric_values)
+        metric_values.append(epoch_metrics)
+        
+        bce = epoch_metrics.get("bce")
+        kl = epoch_metrics.get("kl_div")
+        loss = epoch_metrics.get("loss")
+        if bce is not None:
+            bce_val = bce[0] if isinstance(bce, (list, tuple)) and len(bce) > 0 else bce
+            bce_str = f"{bce_val:.6f}"
+        else:
+            bce_str = "NA"
+        if kl is not None:
+            kl_val = kl[0] if isinstance(kl, (list, tuple)) and len(kl) > 0 else kl
+            kl_str = f"{kl_val:.6f}"
+        else:
+            kl_str = "NA"
+        print(f"Epoch {epoch}: BCE={bce_str}, KL={kl_str}, total_loss={-bce_val+kl_val:.6f}, ELBO={loss[0]:.6f}")
 
+    return reshape_dict_list(metric_values)
 
 if "__main__" in __name__:
     image_shape = (28, 28)
@@ -174,7 +188,7 @@ if "__main__" in __name__:
     # dataset = get_pixel_shift(image_shape, (16384, 2048), 256 + 128, 2048)
     model = FeedForwardVAE(n_pixels, 20, 4096 * 2, 3, in_channels=1).to(GLOBAL_DEVICE)
     schedule = Schedule(
-        number_of_epochs=250,
+        number_of_epochs=150,
         optimizer=optim.AdamW(model.parameters(), lr=1e-3),
     )
     schedule.manual_schedule(
@@ -198,7 +212,7 @@ if "__main__" in __name__:
             # "momentum": {120: 0.01},
         }
     )
-    loss_func = ELBOLoss(0.000000)
+    loss_func = ELBOLoss(1)
     metrics = Metrics(
         {
             "kl_div": GaussKLdiv(),
@@ -239,7 +253,7 @@ if "__main__" in __name__:
     # test_performance_line({"mig": metric_values["MIG"]})
     example_images = [dataset.test_dataset[i][0].to(GLOBAL_DEVICE) for i in range(10)]
     vae_visual_appraisal(
-        model, "MNIST_linear_full_beta-0", example_images, GLOBAL_DEVICE
+        model, "MNIST_linear_full_beta-1", example_images, GLOBAL_DEVICE
     )
     # MNIST_linear: bs=32*32*8, width=256, depth=2, ls=10, lr=3 * 1e-4a, ELBO(0.2 * 1e-11) = 0.0275
     # MNIST_linear: bs=32*32*8, width=256, depth=2, ls=50, lr=3 * 1e-4a, ELBO(0.2 * 1e-11) = 0.0160

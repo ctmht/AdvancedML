@@ -6,7 +6,7 @@ from collections import namedtuple
 from random import randrange
 
 
-NUMBER_OF_THREADS = 8
+NUMBER_OF_THREADS = 0
 DATASET_DIR = "data/datasets"
 Dataset = namedtuple(
     "Dataset",
@@ -48,7 +48,7 @@ def get_MNIST(train_batch_size: int, test_batch_size: int) -> Dataset:
 def create_pixel_shift_image(shape: tuple, index: int | tuple) -> tuple[Tensor, Tensor]:
     image = torch.zeros(size=shape)
     if isinstance(index, int):
-        index = (index // shape[1], index % shape[0])
+        index = (index // shape[1], index % shape[1]) 
     image[index[0], index[1]] = 1.0
     return image.unsqueeze(0), torch.tensor(index)
 
