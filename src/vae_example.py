@@ -397,11 +397,11 @@ def main():
         "batch_size": 256 + 128,
         "mnist": True,
         "width": 512,
-        "depth": 3,
+        "depth": 4,
         "latent_space_size": 100,
-        "optimizer": optim.AdamW,
+        "optimizer": optim.Adam,
         "schedule": {"lr": {0: 1e-4}},
-        "n_epochs": 15,
+        "n_epochs": 100,
         "loss_func": ELBOLoss(0.0),
     }
     config_adjustments = {
@@ -416,7 +416,7 @@ def main():
             # "beta-test2/b=100",
         ],
         "loss_func": [
-            ELBOLoss(0),
+            ELBOLoss(0.1),
             ELBOLoss(1e-17),
             ELBOLoss(1e-15),
             ELBOLoss(1e-13),

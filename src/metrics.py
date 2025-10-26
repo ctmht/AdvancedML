@@ -100,7 +100,7 @@ class LatentMean(VAEMetric):
         output: Tensor,
         factors: Tensor,
     ) -> Tensor | float:
-        return latent_dist.mean.sum()
+        return latent_dist.mean.mean()
 
 
 class LatentStddev(VAEMetric):
