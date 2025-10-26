@@ -400,8 +400,8 @@ def main():
         "depth": 3,
         "latent_space_size": 100,
         "optimizer": optim.AdamW,
-        "schedule": {"lr": {0: 1e-2}},
-        "n_epochs": 5,
+        "schedule": {"lr": {0: 1e-4}},
+        "n_epochs": 15,
         "loss_func": ELBOLoss(0.0),
     }
     config_adjustments = {
