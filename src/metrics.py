@@ -23,10 +23,18 @@ class Metrics:
     def __init__(self, metrics_used: dict) -> None:
         self.metrics_used = metrics_used
         self.recorded_values = {}
+        self.archived_metrics = {i: [] for i in self.metrics_used.keys()}
         self.reset_metrics()
 
     def reset_metrics(self) -> None:
         self.recorded_values = {i: [] for i in self.metrics_used.keys()}
+
+    def archive_metrics(self) -> None:
+        for k, v in self.recorded_values.items():
+            if k not in self.archived_metrics:
+                self.archived_metrics[k] = []
+            self.archived_metrics[k] += v
+            self.recorded_values[k] = []
 
     def __call__(
         self,
@@ -43,15 +51,18 @@ class Metrics:
             self.recorded_values[name].append(metric_value)
 
     def mean_metrics(self) -> dict:
-        return {i: sum(v) / len(v) for i, v in self.recorded_values.items()}
+        return {i: sum(v) / len(v) for i, v in self.recorded_values.items() if v}
 
     def dump(self, path: str, description: str = "") -> None:
-        pickle.dump((description, self.recorded_values), open(path, "wb"))
+        pickle.dump(
+            (description, self.recorded_values, self.archived_metrics), open(path, "wb")
+        )
 
     def load(self, path: str) -> str:
         """returns description"""
-        d, v = pickle.load(open(path, "rb"))
+        d, v, a = pickle.load(open(path, "rb"))
         self.recorded_values = v
+        self.archived_metrics = a
         return d
 
 
@@ -60,6 +71,9 @@ class ELBOLoss(VAEMetric):
         self.beta = beta
         self.exp_loss = BinaryCrossExtropy()
         self.kl_div = GaussKLdiv()
+
+    def __repr__(self) -> str:
+        return f"ELBO loss, beta = {self.beta}, reconstruction loss is {type(self.exp_loss)}"
 
     def __call__(self, data_example, latent_dist, output, factors) -> Tensor:
         exp_loss = self.exp_loss(data_example, latent_dist, output, factors)

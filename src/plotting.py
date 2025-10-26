@@ -10,6 +10,8 @@ def test_performance_line(
     test_losses: list[float] | dict[str, list[float]],
     log: bool = True,
     path: str | None = None,
+    show: bool = True,
+    title: str = "",
 ) -> None:
     """
     test performance plot for debugging and quick evaluation
@@ -20,12 +22,15 @@ def test_performance_line(
     for name, line in test_losses.items():
         plt.plot(range(1, len(line) + 1), line, label=name)
 
+    plt.title(title)
     plt.legend()
     if log:
         plt.yscale("log")
     if path is not None:
         fig.savefig(f"data/logs/automatic/{path}")
-    plt.show()
+    if show:
+        plt.show()
+    plt.close("all")
 
 
 def show_image_grid(
@@ -33,6 +38,7 @@ def show_image_grid(
     shape: tuple[int, int],
     vmax: int | float | None = 1.0,
     path: str | None = None,
+    show: bool = True,
 ) -> None:
     fig = plt.figure(figsize=(16.0, 9.0))
     grid = ImageGrid(
@@ -45,13 +51,19 @@ def show_image_grid(
     for ax, im in zip(grid, images):
         ax.imshow(im, vmax=vmax)
 
-    plt.show()
     if path:
         fig.savefig(path, format="pdf")
+    if show:
+        plt.show()
+    plt.close("all")
 
 
 def vae_visual_appraisal(
-    model, task_name, example_images: list[Tensor] | None = None, device=None
+    model,
+    task_name,
+    example_images: list[Tensor] | None = None,
+    device=None,
+    show: bool = True,
 ):
     """
     No, you don't want to take a close look at this function.
@@ -74,6 +86,7 @@ def vae_visual_appraisal(
         (8, 8),
         1,
         f"data/logs/automatic/{task_name}/images/latent_grid.pdf",
+        show,
     )
     if example_images is None:
         return
@@ -90,6 +103,7 @@ def vae_visual_appraisal(
         (2, 10),
         1,
         f"data/logs/automatic/{task_name}/images/examples_predicted.pdf",
+        show,
     )
     show_image_grid(
         [i.cpu()[0] for i in example_images]
@@ -103,6 +117,7 @@ def vae_visual_appraisal(
         (2, 10),
         None,
         f"data/logs/automatic/{task_name}/images/examples_predicted_normalized.pdf",
+        show,
     )
     # show_image_grid(
     #     [model.generate(device=device) for _ in range(64)],

@@ -16,6 +16,14 @@ class View(nn.Module):
         return input.view(*self.shape)
 
 
+class Identity(nn.Module):
+    def __init__(self) -> None:
+        super(Identity, self).__init__()
+
+    def forward(self, input):
+        return input
+
+
 class BaseVAE(nn.Module):
     def encode(self, x: Tensor) -> Tensor:
         encoder_outputs = self.encoder(x)
@@ -106,7 +114,7 @@ class FeedForwardVAE(BaseVAE):
         self.encoder = nn.Sequential(
             *(
                 [nn.Flatten(), self.layer_block(in_size, hidden_size)]
-                + [self.layer_block(hidden_size, hidden_size) for _ in range(depth - 2)]
+                + [self.layer_block(hidden_size, hidden_size) for i in range(depth - 2)]
             )
         )
         self.ff_mean = nn.Linear(hidden_size, latent_size)
@@ -125,18 +133,24 @@ class FeedForwardVAE(BaseVAE):
             torch.zeros(latent_size), torch.ones(latent_size)
         )
 
-    def layer_block(self, in_size: int, out_size: int) -> nn.Module:
+    def layer_block(
+        self,
+        in_size: int,
+        out_size: int,
+        batch_norm: bool = True,
+        act_func: bool = True,
+    ) -> nn.Module:
         return nn.Sequential(
             nn.Linear(in_size, out_size),
-            nn.LazyBatchNorm1d(),
-            nn.Sigmoid(),
+            nn.LazyBatchNorm1d() if batch_norm else Identity(),
+            nn.Sigmoid() if act_func else Identity(),
             # nn.LeakyReLU(0.1),
         )
 
 
 class ResnetBlock(nn.Module):
     def __init__(self, channels: int = 128) -> None:
-        super(ResnetBlock).__init__()
+        super(ResnetBlock, self).__init__()
         self.internal_module = nn.Sequential(
             nn.Conv2d(channels, channels, (3, 3), 1, (1, 1)),
             nn.MaxPool2d((2, 2), 1, (1, 1)),
@@ -153,7 +167,7 @@ class ResnetBlock(nn.Module):
 
 class ResNet:
     def __init__(self, channels: int, depth: int) -> None:
-        super(ResNet).__init__()
+        super(ResNet, self).__init__()
 
         self.residual_blocks = nn.Sequential(
             *(ResnetBlock(channels) for _ in range(depth))
@@ -162,7 +176,7 @@ class ResNet:
 
 class VQVAE(BaseVAE):
     def __init__(self) -> None:
-        super().__init__()
+        super(VQVAE, self).__init__()
 
     def forward(self, x):
         pass

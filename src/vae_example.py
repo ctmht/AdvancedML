@@ -6,6 +6,7 @@ from torch import Tensor, device
 from typing import Any, Callable, Generator, Hashable
 from tqdm import trange, tqdm
 from datetime import datetime
+from copy import deepcopy
 
 from models import ExampleVAE, BaseVAE, FeedForwardVAE
 from metrics import (
@@ -58,6 +59,49 @@ def reshape_dict_list(dict_list: list[dict]) -> dict[Hashable, list]:
     return output
 
 
+def vary_config_variable(
+    config: dict, adjustments: dict[str, list] | list[dict[str, Any]]
+):
+    if isinstance(adjustments, dict):
+        num_adj = len(list(adjustments.values())[0])
+        adjustments = [
+            {k: v[i] for k, v in adjustments.items()} for i in range(num_adj)
+        ]
+
+    for adj in adjustments:
+        config_copy = deepcopy(config)
+        for k, v in adj.items():
+            config_copy[k] = v
+
+        yield config_copy
+
+
+def list_dir_visible(path: str):
+    for i in os.listdir(path):
+        if not i.startswith("."):
+            yield i
+
+
+def get_metric(experiment_name: str, metric_name: str) -> list:
+    path = f"data/logs/automatic/{experiment_name}/metrics"
+    latest = max(list_dir_visible(path))
+    path = os.path.join(path, latest)
+    metrics = Metrics({})
+    metrics.load(path)
+    # print(, "\n\n")
+    # print(metrics.archived_metrics.keys())
+    return metrics.archived_metrics[metric_name]
+
+
+def get_multi_experiment_metric(experiment_base_name: str, metric_name: str) -> dict:
+    path = f"data/logs/automatic/{experiment_base_name}"
+    # print(path, list(list_dir_visible(path)))
+    names = [(i, f"{experiment_base_name}/{i}") for i in list_dir_visible(path)]
+    return {
+        sub_name: get_metric(full_name, metric_name) for sub_name, full_name in names
+    }
+
+
 class Schedule:  # I plan on adding stuff later, hence this class
     def __init__(self, number_of_epochs: int, optimizer: optim.Optimizer) -> None:
         self.n_epochs = number_of_epochs
@@ -106,6 +150,9 @@ def run_test(dataset, model, loss_func, metrics):
         metrics(i, latent, out, label)
     output = metrics.mean_metrics()
     output["loss"] = (sum(test_losses) / len(test_losses),)
+    metrics.recorded_values["loss"] = metrics.recorded_values.get("loss", []) + [
+        output["loss"]
+    ]
     return output
 
 
@@ -118,7 +165,7 @@ def run_train(dataset, model, schedule, loss_func, metrics: Metrics):
     label_converter = dataset.label_converter
     train_bar = tqdm(train_loader, desc=f"epoch {schedule.epoch}")
     optimizer = schedule.optimizer
-    metrics.reset_metrics()
+    metrics.archive_metrics()
     for i, label in train_bar:
         optimizer.zero_grad()
         i = i.to(GLOBAL_DEVICE)
@@ -134,6 +181,11 @@ def run_train(dataset, model, schedule, loss_func, metrics: Metrics):
         train_bar.set_postfix({"loss": f"{loss_sum / count:.3e}"})
     output = metrics.mean_metrics()
     output["loss"] = (sum(train_losses) / len(train_losses),)
+    # print(list(metrics.archived_metrics.keys()))
+    metrics.recorded_values["loss"] = metrics.recorded_values.get("loss", []) + [
+        output["loss"]
+    ]
+    # print(metrics.recorded_values["loss"])
     return output
 
 
@@ -177,7 +229,7 @@ def create_log_directory(test_name: str) -> None:
     os.makedirs(log_dir + "/images", exist_ok=True)
 
 
-def experiment_from_config(config) -> None:
+def experiment_from_config(config, verbose: bool = False) -> None:
     """
     assumes ffnn for now
     config keys:
@@ -225,7 +277,11 @@ def experiment_from_config(config) -> None:
     name = config["experiment_name"]
     create_log_directory(name)
     metric_values = run_experiment(dataset, schedule, model, loss_func, metrics)
-
+    metrics.archive_metrics()
+    metrics.dump(
+        f"data/logs/automatic/{name}/metrics/{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        str(config),
+    )
     # print(metric_values)
     # visualisation
     test_performance_line(
@@ -235,10 +291,12 @@ def experiment_from_config(config) -> None:
             "bce": metric_values["bce"],
         },
         path=f"{name}/images/losses.pdf",
+        show=verbose,
     )
     test_performance_line(
         {"kl_div": metric_values["kl_div"]},
         path=f"{name}/images/kl_div.pdf",
+        show=verbose,
     )
     test_performance_line(
         {
@@ -246,6 +304,7 @@ def experiment_from_config(config) -> None:
             "latent stddev": metric_values["latent_stddev"],
         },
         path=f"{name}/images/latent_stats.pdf",
+        show=verbose,
     )
     test_performance_line(
         {
@@ -253,6 +312,7 @@ def experiment_from_config(config) -> None:
         },
         log=False,
         path=f"{name}/images/latent_mean.pdf",
+        show=verbose,
     )
     # test_performance_line({"mig": metric_values["MIG"]})
     example_images = [dataset.test_dataset[i][0].to(GLOBAL_DEVICE) for i in range(10)]
@@ -261,10 +321,7 @@ def experiment_from_config(config) -> None:
         name,
         example_images,
         GLOBAL_DEVICE,
-    )
-    metrics.dump(
-        f"data/logs/automatic/{name}/metrics/{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-        str(config),
+        show=verbose,
     )
 
 
@@ -332,18 +389,59 @@ def direct_test():
     # MNIST_linear: bs=32*32*8, width=1024, depth=2, ls=784, lr=3 * 1e-4a, ELBO(1e-9) = 0.0287
 
 
-if "__main__" in __name__:
+def main():
     config = {
-        "experiment_name": "config_experiment",
+        "experiment_name": "beta-test",
         "image_shape": (28, 28),
         "batch_size": 256 + 128,
         "mnist": True,
         "width": 8192,
-        "depth": 3,
-        "latent_space_size": 40,
+        "depth": 2,
+        "latent_space_size": 100,
         "optimizer": optim.AdamW,
-        "schedule": {"lr": {0: 6e-3}},
-        "n_epochs": 30,
+        "schedule": {"lr": {0: 3e-4}},
+        "n_epochs": 50,
         "loss_func": ELBOLoss(0.0),
     }
-    experiment_from_config(config)
+    config_adjustments = {
+        "experiment_name": [
+            "beta-test/b=0",
+            "beta-test/b=1e-10",
+            "beta-test/b=1e-5",
+            "beta-test/b=1",
+            "beta-test/b=10",
+            "beta-test/b=100",
+        ],
+        "loss_func": [
+            ELBOLoss(0),
+            ELBOLoss(1e-10),
+            ELBOLoss(1e-5),
+            ELBOLoss(1),
+            ELBOLoss(10),
+            ELBOLoss(100),
+        ],
+    }
+    configs = vary_config_variable(
+        config,
+        config_adjustments,
+    )
+
+    for config in configs:
+        experiment_from_config(config, False)
+
+    test_performance_line(
+        get_multi_experiment_metric("beta-test", "loss"), False, title="ELBO loss"
+    )
+    test_performance_line(
+        get_multi_experiment_metric("beta-test", "kl_div"), title="ELBO KL divergence"
+    )
+    test_performance_line(
+        get_multi_experiment_metric("beta-test", "mse"), title="MSE loss"
+    )
+    test_performance_line(
+        get_multi_experiment_metric("beta-test", "bce"), title="BCE loss"
+    )
+
+
+if "__main__" in __name__:
+    main()
