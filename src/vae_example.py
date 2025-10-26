@@ -170,6 +170,7 @@ def run_train(dataset, model, schedule, loss_func, metrics: Metrics):
         optimizer.zero_grad()
         i = i.to(GLOBAL_DEVICE)
         label = label_converter(label)
+        # print(i.mean(), i.std(), i.min(), i.max())
         out, latent = model(i)
         loss = loss_func(i, latent, out, label)
         metrics(i, latent, out, label)
@@ -391,7 +392,7 @@ def direct_test():
 
 def main():
     config = {
-        "experiment_name": "beta-test",
+        "experiment_name": "beta-test2",
         "image_shape": (28, 28),
         "batch_size": 256 + 128,
         "mnist": True,
@@ -405,20 +406,24 @@ def main():
     }
     config_adjustments = {
         "experiment_name": [
-            "beta-test/b=0",
-            "beta-test/b=1e-10",
-            "beta-test/b=1e-5",
-            "beta-test/b=1",
-            "beta-test/b=10",
-            "beta-test/b=100",
+            "beta-test2/b=0",
+            "beta-test2/b=1e-17",
+            "beta-test2/b=1e-15",
+            "beta-test2/b=1e-13",
+            # "beta-test2/b=1e-5",
+            # "beta-test2/b=1",
+            # "beta-test2/b=10",
+            # "beta-test2/b=100",
         ],
         "loss_func": [
-            ELBOLoss(0),
-            ELBOLoss(1e-10),
-            ELBOLoss(1e-5),
             ELBOLoss(1),
-            ELBOLoss(10),
-            ELBOLoss(100),
+            ELBOLoss(1e-17),
+            ELBOLoss(1e-15),
+            ELBOLoss(1e-13),
+            # ELBOLoss(1e-5),
+            # ELBOLoss(1),
+            # ELBOLoss(10),
+            # ELBOLoss(100),
         ],
     }
     configs = vary_config_variable(
@@ -430,7 +435,7 @@ def main():
         experiment_from_config(config, False)
 
     test_performance_line(
-        get_multi_experiment_metric("beta-test", "loss"), False, title="ELBO loss"
+        get_multi_experiment_metric("beta-test2", "loss"), title="ELBO loss"
     )
     test_performance_line(
         get_multi_experiment_metric("beta-test", "kl_div"), title="ELBO KL divergence"

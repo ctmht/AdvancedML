@@ -36,7 +36,7 @@ class BaseVAE(nn.Module):
         eps = 1e-10
         m, v = self.encode(x)
         z = dist.Normal(m, v**2 + eps)  # 2.72 ** (v))  # torch.exp(v))
-        return self.decode(z.sample()), z
+        return self.decode(z.rsample()), z
 
     def generate(
         self, z: Tensor | None = None, return_image: bool = True, device=None
@@ -137,7 +137,7 @@ class FeedForwardVAE(BaseVAE):
         self,
         in_size: int,
         out_size: int,
-        batch_norm: bool = True,
+        batch_norm: bool = False,
         act_func: bool = True,
     ) -> nn.Module:
         return nn.Sequential(
