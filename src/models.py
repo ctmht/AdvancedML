@@ -121,10 +121,13 @@ class FeedForwardVAE(BaseVAE):
         self.ff_variance = nn.Linear(hidden_size, latent_size)
         self.decoder = nn.Sequential(
             *(
-                [View(-1, latent_size), self.layer_block(latent_size, hidden_size)]
-                + [self.layer_block(hidden_size, hidden_size) for _ in range(depth - 2)]
+                [
+                    View(-1, latent_size),
+                    self.layer_block(latent_size, hidden_size),
+                ]
+                + [self.layer_block(hidden_size, hidden_size) for i in range(depth - 2)]
                 + [
-                    self.layer_block(hidden_size, in_size),
+                    self.layer_block(hidden_size, in_size, act_func=False),
                     View(-1, in_channels, im_out_size, im_out_size),
                 ]
             )

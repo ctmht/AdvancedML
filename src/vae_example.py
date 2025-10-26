@@ -416,7 +416,7 @@ def main():
             # "beta-test2/b=100",
         ],
         "loss_func": [
-            ELBOLoss(1),
+            ELBOLoss(0),
             ELBOLoss(1e-17),
             ELBOLoss(1e-15),
             ELBOLoss(1e-13),

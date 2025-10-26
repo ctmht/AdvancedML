@@ -69,7 +69,7 @@ class Metrics:
 class ELBOLoss(VAEMetric):
     def __init__(self, beta: float = 1.0) -> None:
         self.beta = beta
-        self.exp_loss = BinaryCrossExtropy()
+        self.exp_loss = MSE()
         self.kl_div = GaussKLdiv()
 
     def __repr__(self) -> str:
