@@ -396,20 +396,20 @@ def main():
         "image_shape": (28, 28),
         "batch_size": 256 + 128,
         "mnist": True,
-        "width": 8192,
-        "depth": 2,
+        "width": 512,
+        "depth": 3,
         "latent_space_size": 100,
         "optimizer": optim.AdamW,
-        "schedule": {"lr": {0: 3e-4}},
-        "n_epochs": 50,
+        "schedule": {"lr": {0: 1e-2}},
+        "n_epochs": 5,
         "loss_func": ELBOLoss(0.0),
     }
     config_adjustments = {
         "experiment_name": [
-            "beta-test2/b=0",
-            "beta-test2/b=1e-17",
-            "beta-test2/b=1e-15",
-            "beta-test2/b=1e-13",
+            "updated/b=0",
+            # "beta-test2/b=1e-17",
+            # "beta-test2/b=1e-15",
+            # "beta-test2/b=1e-13",
             # "beta-test2/b=1e-5",
             # "beta-test2/b=1",
             # "beta-test2/b=10",
@@ -432,8 +432,9 @@ def main():
     )
 
     for config in configs:
-        experiment_from_config(config, False)
+        experiment_from_config(config, True)
 
+    exit()
     test_performance_line(
         get_multi_experiment_metric("beta-test2", "loss"), title="ELBO loss"
     )

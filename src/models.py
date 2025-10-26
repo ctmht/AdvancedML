@@ -35,7 +35,7 @@ class BaseVAE(nn.Module):
     def forward(self, x) -> Tensor:
         eps = 1e-10
         m, v = self.encode(x)
-        z = dist.Normal(m, v**2 + eps)  # 2.72 ** (v))  # torch.exp(v))
+        z = dist.Normal(m, nn.Softplus()(v))  # 2.72 ** (v))  # torch.exp(v))
         return self.decode(z.rsample()), z
 
     def generate(
@@ -143,7 +143,7 @@ class FeedForwardVAE(BaseVAE):
         return nn.Sequential(
             nn.Linear(in_size, out_size),
             nn.LazyBatchNorm1d() if batch_norm else Identity(),
-            nn.Sigmoid() if act_func else Identity(),
+            nn.ReLU() if act_func else Identity(),
             # nn.LeakyReLU(0.1),
         )
 
