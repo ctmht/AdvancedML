@@ -196,6 +196,16 @@ def get_metric(experiment_name: str, metric_name: str) -> list:
     return metrics.archived_metrics[metric_name]
 
 
+def get_metric_obj(experiment_name: str) -> tuple[Metrics, str]:
+    """Get a metric from an experiment log"""
+    path = f"data/logs/automatic/{experiment_name}/metrics"
+    latest = max(list_dir_visible(path))
+    path = os.path.join(path, latest)
+    metrics = Metrics({})
+    desc = metrics.load(path)
+    return metrics, desc
+
+
 def get_multi_experiment_metric(experiment_base_name: str, metric_name: str) -> dict:
     """
     Get the metric data for a given metric across all experiments in a multi-config experiment.
