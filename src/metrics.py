@@ -1,3 +1,4 @@
+from itertools import product
 import pickle
 import torch
 import torch.nn as nn
@@ -20,8 +21,14 @@ class VAEMetric:
 class Metrics:
     """used to combine metrics for easy use"""
 
-    def __init__(self, metrics_used: dict) -> None:
-        self.metrics_used = metrics_used
+    def __init__(
+        self, metrics_used: dict, prefix_options: list[str] | None = None
+    ) -> None:
+        prefix_options = prefix_options or [""]
+        self.metrics = metrics_used
+        self.metrics_used = {
+            i + k: v for i, (k, v) in product(prefix_options, metrics_used.items())
+        }
         self.recorded_values = {}
         self.archived_metrics = {i: [] for i in self.metrics_used.keys()}
         self.reset_metrics()
@@ -42,13 +49,18 @@ class Metrics:
         latent_dist: Distribution,
         output: Tensor,
         factors: Tensor,
+        prefix: str = "",
+        exclude: list[str] | None = None,
     ) -> None:
-        for name, metric in self.metrics_used.items():
+        exclude = exclude or []
+        for name, metric in self.metrics.items():
+            if name in exclude:
+                continue
             metric_value = metric(data_example, latent_dist, output, factors)
             if isinstance(metric_value, Tensor):
                 metric_value = metric_value.item()
 
-            self.recorded_values[name].append(metric_value)
+            self.recorded_values[prefix + name].append(metric_value)
 
     def mean_metrics(self) -> dict:
         return {i: sum(v) / len(v) for i, v in self.recorded_values.items() if v}
@@ -116,7 +128,7 @@ class LatentStddev(VAEMetric):
 
 class BinaryCrossExtropy(VAEMetric):
     def __init__(self) -> None:
-        self.bce = nn.BCELoss()
+        self.bce = nn.BCELoss(reduction="sum")
 
     def __call__(
         self,
@@ -144,6 +156,7 @@ class GaussKLdiv(VAEMetric):
 class MIG(VAEMetric):
     def __call__(self, data_example, latent_vector, output, factors) -> float:
         # print(latent_vector.mean.shape, factors.shape)
+        # raise NotImplementedError("MIG temporarily disabled")
         return _compute_mig(
             latent_vector.mean.detach().cpu().numpy().T,
             factors.detach().cpu().numpy().T,
